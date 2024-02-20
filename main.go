@@ -57,7 +57,7 @@ func main() {
 	for _, sensorName := range sensorNames {
 		sensorGraph := createSensorGraph(g, sensorName, 48*time.Hour /*=window_duration*/)
 		graphs[sensorName] = sensorGraph
-		addTableRowForSensor(sensorGraph, table, index)
+		addTableRowForSensor(sensorGraph, app, table, index)
 		index++
 	}
 
@@ -86,14 +86,15 @@ func main() {
 				continue
 			}
 			for sensor, result := range data {
-				incr.TracePrintf(ctx, "%s: %v", sensor, result.Elapsed.Round(time.Millisecond))
+				incr.TracePrintf(ctx, "fetched %s in %v", sensor, result.Elapsed.Round(time.Millisecond))
 				graphs[sensor].Latest.Set(result)
 			}
 			if err = g.ParallelStabilize(ctx); err != nil {
 				incr.TraceErrorf(ctx, "stabilization error: %v", err)
 			}
-			logView.SetText(logs.String())
-			app.Draw()
+			app.QueueUpdate(func() {
+				logView.SetText(logs.String())
+			})
 			timer.Reset((5 * time.Second) - time.Since(start))
 			<-timer.C
 		}
@@ -104,75 +105,133 @@ func main() {
 	}
 }
 
-func addTableRowForSensor(sensorGraph *SensorGraph, table *tview.Table, index int) {
+func tempRange(temp float64) tcell.Color {
+	if temp > 30 {
+		return tcell.ColorRed
+	}
+	if temp > 22 {
+		return tcell.ColorYellow
+	}
+	if temp < 18 {
+		return tcell.ColorBlue
+	}
+	return tcell.ColorWhite
+}
+
+func co2Range(co2 int) tcell.Color {
+	if co2 > 1500 {
+		return tcell.ColorRed
+	}
+	if co2 > 800 {
+		return tcell.ColorYellow
+	}
+	return tcell.ColorWhite
+}
+
+func humidRange(humid float64) tcell.Color {
+	if humid > 80.0 {
+		return tcell.ColorRed
+	}
+	if humid > 60.0 {
+		return tcell.ColorYellow
+	}
+	return tcell.ColorWhite
+}
+
+func pm25Range(pm25 int) tcell.Color {
+	if pm25 > 40 {
+		return tcell.ColorRed
+	}
+	if pm25 > 20 {
+		return tcell.ColorYellow
+	}
+	return tcell.ColorWhite
+}
+
+func elapsedRange(elapsed time.Duration) tcell.Color {
+	if elapsed > 300*time.Millisecond {
+		return tcell.ColorRed
+	}
+	if elapsed > 100*time.Millisecond {
+		return tcell.ColorYellow
+	}
+	return tcell.ColorWhite
+}
+
+func defaultRange[A any](v A) tcell.Color {
+	return tcell.ColorWhite
+}
+
+func updateCell[A any](app *tview.Application, cell *tview.TableCell, colorRange func(A) tcell.Color, newTextFormat string, value A) {
+	app.QueueUpdateDraw(func() {
+		cell.SetBackgroundColor(tcell.ColorWhiteSmoke)
+		newColor := colorRange(value)
+		if newColor == tcell.ColorWhite {
+			newColor = tcell.ColorBlack
+		}
+		cell.SetTextColor(newColor)
+		cell.SetText(fmt.Sprintf(newTextFormat, value))
+	})
+	go func() {
+		time.Sleep(2 * time.Second)
+		app.QueueUpdateDraw(func() {
+			if cell.Color == tcell.ColorBlack {
+				cell.SetTextColor(tcell.ColorWhite)
+			}
+			cell.SetTransparency(true)
+		})
+	}()
+}
+
+func addTableRowForSensor(sensorGraph *SensorGraph, app *tview.Application, table *tview.Table, index int) {
 	labelCell := tview.NewTableCell(sensorGraph.Name).SetTextColor(tcell.ColorWhite).SetAlign(tview.AlignRight)
 	table.SetCell(index, 0, labelCell)
 
 	tempLastCell := tview.NewTableCell("").SetTextColor(tcell.ColorWhite).SetAlign(tview.AlignCenter)
 	sensorGraph.TempLast.OnUpdate(func(_ context.Context, temp float64) {
-		tempLastCell.SetText(fmt.Sprintf("%0.2fc", temp))
+		updateCell(app, tempLastCell, tempRange, "%0.2fc", temp)
 	})
 	table.SetCell(index, 1, tempLastCell)
 
 	tempMinCell := tview.NewTableCell("").SetTextColor(tcell.ColorWhite).SetAlign(tview.AlignCenter)
 	sensorGraph.TempMin.OnUpdate(func(_ context.Context, temp float64) {
-		tempMinCell.SetText(fmt.Sprintf("%0.2fc", temp))
+		updateCell(app, tempMinCell, tempRange, "%0.2fc", temp)
 	})
 	table.SetCell(index, 2, tempMinCell)
 
 	tempMaxCell := tview.NewTableCell("").SetTextColor(tcell.ColorWhite).SetAlign(tview.AlignCenter)
 	sensorGraph.TempMax.OnUpdate(func(_ context.Context, temp float64) {
-		tempMaxCell.SetText(fmt.Sprintf("%0.2fc", temp))
+		updateCell(app, tempMaxCell, tempRange, "%0.2fc", temp)
 	})
 	table.SetCell(index, 3, tempMaxCell)
 
 	humidCell := tview.NewTableCell("").SetTextColor(tcell.ColorWhite).SetAlign(tview.AlignCenter)
 	sensorGraph.HumidityLast.OnUpdate(func(_ context.Context, humidity float64) {
-		humidCell.SetText(fmt.Sprintf("%0.2f%%", humidity))
+		updateCell(app, humidCell, humidRange, "%0.2f%%", humidity)
 	})
 	table.SetCell(index, 4, humidCell)
 
 	co2Cell := tview.NewTableCell("").SetTextColor(tcell.ColorWhite).SetAlign(tview.AlignCenter)
 	sensorGraph.CO2Last.OnUpdate(func(_ context.Context, co2 float64) {
-		co2Cell.SetText(fmt.Sprintf("%d", int(co2)))
+		updateCell(app, co2Cell, co2Range, "%d", int(co2))
 	})
 	table.SetCell(index, 5, co2Cell)
 
 	pm25Cell := tview.NewTableCell("").SetTextColor(tcell.ColorWhite).SetAlign(tview.AlignCenter)
 	sensorGraph.PM25Last.OnUpdate(func(_ context.Context, pm25 float64) {
-		pm25Cell.SetText(fmt.Sprintf("%d", int(pm25)))
+		updateCell(app, pm25Cell, pm25Range, "%d", int(pm25))
 	})
 	table.SetCell(index, 6, pm25Cell)
 
 	elapsedCell := tview.NewTableCell("").SetTextColor(tcell.ColorWhite).SetAlign(tview.AlignCenter)
 	sensorGraph.ElapsedLast.OnUpdate(func(_ context.Context, elapsed time.Duration) {
-		elapsedCell.SetText(elapsed.Round(time.Millisecond).String())
-		if elapsed > 200*time.Millisecond {
-			elapsedCell.SetBackgroundColor(tcell.ColorDarkRed)
-			elapsedCell.SetTextColor(tcell.ColorWhite)
-		} else if elapsed > 100*time.Millisecond {
-			elapsedCell.SetBackgroundColor(tcell.ColorYellow)
-			elapsedCell.SetTextColor(tcell.ColorWhite)
-		} else {
-			elapsedCell.SetTransparency(true)
-			elapsedCell.SetTextColor(tcell.ColorWhite)
-		}
+		updateCell(app, elapsedCell, elapsedRange, "%v", elapsed.Round(time.Millisecond))
 	})
 	table.SetCell(index, 7, elapsedCell)
 
 	elapsedP95Cell := tview.NewTableCell("").SetTextColor(tcell.ColorWhite).SetAlign(tview.AlignCenter)
 	sensorGraph.ElapsedP95.OnUpdate(func(_ context.Context, elapsed time.Duration) {
-		elapsedP95Cell.SetText(elapsed.Round(time.Millisecond).String())
-		if elapsed > 400*time.Millisecond {
-			elapsedP95Cell.SetBackgroundColor(tcell.ColorDarkRed)
-			elapsedP95Cell.SetTextColor(tcell.ColorWhite)
-		} else if elapsed > 200*time.Millisecond {
-			elapsedP95Cell.SetBackgroundColor(tcell.ColorYellow)
-			elapsedP95Cell.SetTextColor(tcell.ColorWhite)
-		} else {
-			elapsedP95Cell.SetTransparency(true)
-			elapsedP95Cell.SetTextColor(tcell.ColorWhite)
-		}
+		updateCell(app, elapsedP95Cell, elapsedRange, "%v", elapsed.Round(time.Millisecond))
 	})
 	table.SetCell(index, 8, elapsedP95Cell)
 }
@@ -260,13 +319,13 @@ func createSensorGraph(g *incr.Graph, name string, windowLength time.Duration) *
 	}, 0.5)
 	output.HumidityMin, output.HumidityAvg, output.HumidityLast, output.HumidityMax = createStatsFor(g, window, func(a Awair) float64 {
 		return a.Humid
-	}, 0.05)
+	}, 0.1)
 	output.PM25Min, output.PM25Avg, output.PM25Last, output.PM25Max = createStatsFor(g, window, func(a Awair) float64 {
 		return a.PM25
 	}, 1.0)
 	output.CO2Min, output.CO2Avg, output.CO2Last, output.CO2Max = createStatsFor(g, window, func(a Awair) float64 {
 		return a.CO2
-	}, 1.0)
+	}, 5.0)
 
 	return &output
 }
