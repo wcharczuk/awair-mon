@@ -1,16 +1,21 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"math"
 	"net/http"
 	"net/url"
+	"os"
 	"slices"
 	"sort"
 	"sync"
 	"time"
+
+	"github.com/gdamore/tcell/v2"
+	"github.com/rivo/tview"
 
 	"github.com/wcharczuk/go-incr"
 )
@@ -24,25 +29,172 @@ var awairSensors = map[string]string{
 
 func main() {
 	g := incr.New()
+	app := tview.NewApplication()
+
+	logs := new(bytes.Buffer)
+
+	table := tview.NewTable().
+		SetBorders(true)
+
+	var sensorNames []string
+	for sensorName := range awairSensors {
+		sensorNames = append(sensorNames, sensorName)
+	}
+	sort.Strings(sensorNames)
+
 	graphs := make(map[string]*SensorGraph)
-	for sensor := range awairSensors {
-		graphs[sensor] = createSensorGraph(g, sensor, 48*time.Hour)
+	table.SetCell(0, 0, tview.NewTableCell("Sensor"))
+	table.SetCell(0, 1, tview.NewTableCell("Temp (last)"))
+	table.SetCell(0, 2, tview.NewTableCell("Temp (min)"))
+	table.SetCell(0, 3, tview.NewTableCell("Temp (max)"))
+	table.SetCell(0, 4, tview.NewTableCell("Humidity % (last)"))
+	table.SetCell(0, 5, tview.NewTableCell("CO2 (last)"))
+	table.SetCell(0, 6, tview.NewTableCell("PM2.5 (last)"))
+	table.SetCell(0, 7, tview.NewTableCell("Elapsed (last)"))
+	table.SetCell(0, 8, tview.NewTableCell("Elapsed (P95)"))
+
+	index := 1
+	for _, sensorName := range sensorNames {
+		sensorGraph := createSensorGraph(g, sensorName, 48*time.Hour /*=window_duration*/)
+		graphs[sensorName] = sensorGraph
+		addTableRowForSensor(sensorGraph, table, index)
+		index++
 	}
 
+	logView := tview.NewTextView().SetText("").SetTextAlign(tview.AlignLeft)
+
+	grid := tview.NewGrid().
+		SetRows(-2, -1).
+		SetColumns(0).
+		SetBorders(true).
+		AddItem(table, 0, 0, 1, 1, 0, 0, false).
+		AddItem(logView, 1, 0, 1, 1, 0, 0, false)
+
+	app.SetRoot(grid, true).EnableMouse(false)
+
+	go func() {
+		ctx := context.Background()
+		ctx = incr.WithTracingOutputs(ctx, logs, logs)
+		timer := time.NewTicker(5 * time.Second)
+		var start time.Time
+		for {
+			logs.Reset()
+			start = time.Now()
+			data, err := getSensorDataWithTimeout(ctx, awairSensors)
+			if err != nil {
+				incr.TraceErrorf(ctx, "error getting sensor data: %v", err)
+				continue
+			}
+			for sensor, result := range data {
+				incr.TracePrintf(ctx, "%s: %v", sensor, result.Elapsed.Round(time.Millisecond))
+				graphs[sensor].Latest.Set(result)
+			}
+			if err = g.ParallelStabilize(ctx); err != nil {
+				incr.TraceErrorf(ctx, "stabilization error: %v", err)
+			}
+			logView.SetText(logs.String())
+			app.Draw()
+			timer.Reset((5 * time.Second) - time.Since(start))
+			<-timer.C
+		}
+	}()
+	err := app.Run()
+	if err != nil {
+		maybeFatal(err)
+	}
+}
+
+func addTableRowForSensor(sensorGraph *SensorGraph, table *tview.Table, index int) {
+	labelCell := tview.NewTableCell(sensorGraph.Name).SetTextColor(tcell.ColorWhite).SetAlign(tview.AlignRight)
+	table.SetCell(index, 0, labelCell)
+
+	tempLastCell := tview.NewTableCell("").SetTextColor(tcell.ColorWhite).SetAlign(tview.AlignCenter)
+	sensorGraph.TempLast.OnUpdate(func(_ context.Context, temp float64) {
+		tempLastCell.SetText(fmt.Sprintf("%0.2fc", temp))
+	})
+	table.SetCell(index, 1, tempLastCell)
+
+	tempMinCell := tview.NewTableCell("").SetTextColor(tcell.ColorWhite).SetAlign(tview.AlignCenter)
+	sensorGraph.TempMin.OnUpdate(func(_ context.Context, temp float64) {
+		tempMinCell.SetText(fmt.Sprintf("%0.2fc", temp))
+	})
+	table.SetCell(index, 2, tempMinCell)
+
+	tempMaxCell := tview.NewTableCell("").SetTextColor(tcell.ColorWhite).SetAlign(tview.AlignCenter)
+	sensorGraph.TempMax.OnUpdate(func(_ context.Context, temp float64) {
+		tempMaxCell.SetText(fmt.Sprintf("%0.2fc", temp))
+	})
+	table.SetCell(index, 3, tempMaxCell)
+
+	humidCell := tview.NewTableCell("").SetTextColor(tcell.ColorWhite).SetAlign(tview.AlignCenter)
+	sensorGraph.HumidityLast.OnUpdate(func(_ context.Context, humidity float64) {
+		humidCell.SetText(fmt.Sprintf("%0.2f%%", humidity))
+	})
+	table.SetCell(index, 4, humidCell)
+
+	co2Cell := tview.NewTableCell("").SetTextColor(tcell.ColorWhite).SetAlign(tview.AlignCenter)
+	sensorGraph.CO2Last.OnUpdate(func(_ context.Context, co2 float64) {
+		co2Cell.SetText(fmt.Sprintf("%d", int(co2)))
+	})
+	table.SetCell(index, 5, co2Cell)
+
+	pm25Cell := tview.NewTableCell("").SetTextColor(tcell.ColorWhite).SetAlign(tview.AlignCenter)
+	sensorGraph.PM25Last.OnUpdate(func(_ context.Context, pm25 float64) {
+		pm25Cell.SetText(fmt.Sprintf("%d", int(pm25)))
+	})
+	table.SetCell(index, 6, pm25Cell)
+
+	elapsedCell := tview.NewTableCell("").SetTextColor(tcell.ColorWhite).SetAlign(tview.AlignCenter)
+	sensorGraph.ElapsedLast.OnUpdate(func(_ context.Context, elapsed time.Duration) {
+		elapsedCell.SetText(elapsed.Round(time.Millisecond).String())
+		if elapsed > 200*time.Millisecond {
+			elapsedCell.SetBackgroundColor(tcell.ColorDarkRed)
+			elapsedCell.SetTextColor(tcell.ColorWhite)
+		} else if elapsed > 100*time.Millisecond {
+			elapsedCell.SetBackgroundColor(tcell.ColorYellow)
+			elapsedCell.SetTextColor(tcell.ColorWhite)
+		} else {
+			elapsedCell.SetTransparency(true)
+			elapsedCell.SetTextColor(tcell.ColorWhite)
+		}
+	})
+	table.SetCell(index, 7, elapsedCell)
+
+	elapsedP95Cell := tview.NewTableCell("").SetTextColor(tcell.ColorWhite).SetAlign(tview.AlignCenter)
+	sensorGraph.ElapsedP95.OnUpdate(func(_ context.Context, elapsed time.Duration) {
+		elapsedP95Cell.SetText(elapsed.Round(time.Millisecond).String())
+		if elapsed > 400*time.Millisecond {
+			elapsedP95Cell.SetBackgroundColor(tcell.ColorDarkRed)
+			elapsedP95Cell.SetTextColor(tcell.ColorWhite)
+		} else if elapsed > 200*time.Millisecond {
+			elapsedP95Cell.SetBackgroundColor(tcell.ColorYellow)
+			elapsedP95Cell.SetTextColor(tcell.ColorWhite)
+		} else {
+			elapsedP95Cell.SetTransparency(true)
+			elapsedP95Cell.SetTextColor(tcell.ColorWhite)
+		}
+	})
+	table.SetCell(index, 8, elapsedP95Cell)
+}
+
+func maybeFatal(err error) {
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "%+v\n", err)
+		os.Exit(1)
+	}
 }
 
 func createSensorGraph(g *incr.Graph, name string, windowLength time.Duration) *SensorGraph {
 	output := SensorGraph{
 		Name: name,
 	}
-
-	output.Latest = incr.Var[*Awair](g, nil)
+	output.Latest = incr.Var[Awair](g, Awair{})
 	windowData := new(Queue[Awair])
-	window := incr.Map(g, output.Latest, func(sample *Awair) []Awair {
-		if sample == nil {
+	window := incr.Map(g, output.Latest, func(sample Awair) []Awair {
+		if sample.Timestamp.IsZero() {
 			return nil
 		}
-		windowData.Push(*sample)
+		windowData.Push(sample)
 		cutoff := time.Now().Add(-windowLength)
 		for windowData.Len() > 0 {
 			head, _ := windowData.Peek()
@@ -108,10 +260,10 @@ func createSensorGraph(g *incr.Graph, name string, windowLength time.Duration) *
 	}, 0.5)
 	output.HumidityMin, output.HumidityAvg, output.HumidityLast, output.HumidityMax = createStatsFor(g, window, func(a Awair) float64 {
 		return a.Humid
-	}, 0.01)
+	}, 0.05)
 	output.PM25Min, output.PM25Avg, output.PM25Last, output.PM25Max = createStatsFor(g, window, func(a Awair) float64 {
 		return a.PM25
-	}, 0.5)
+	}, 1.0)
 	output.CO2Min, output.CO2Avg, output.CO2Last, output.CO2Max = createStatsFor(g, window, func(a Awair) float64 {
 		return a.CO2
 	}, 1.0)
@@ -137,7 +289,7 @@ func createStatsFor(g *incr.Graph, window incr.Incr[[]Awair], mapfn func(Awair) 
 		if len(data) > 0 {
 			return data[0]
 		}
-		return math.NaN()
+		return 0
 	}), epsilon)
 	avgValue := cutoffEpsilon(g, incr.Map(g, sortedValues, func(data []float64) float64 {
 		if len(data) > 0 {
@@ -147,19 +299,19 @@ func createStatsFor(g *incr.Graph, window incr.Incr[[]Awair], mapfn func(Awair) 
 			}
 			return accum / float64(len(data))
 		}
-		return math.NaN()
+		return 0
 	}), epsilon)
 	lastValue := cutoffEpsilon(g, incr.Map(g, sortedValues, func(data []float64) float64 {
 		if len(data) > 0 {
 			return data[len(data)-1]
 		}
-		return math.NaN()
+		return 0
 	}), epsilon)
 	maxValue := cutoffEpsilon(g, incr.Map(g, sortedValues, func(data []float64) float64 {
 		if len(data) > 0 {
 			return data[len(data)-1]
 		}
-		return math.NaN()
+		return 0
 	}), epsilon)
 	min = incr.MustObserve(g, minValue)
 	avg = incr.MustObserve(g, avgValue)
@@ -186,7 +338,7 @@ func cutoffEpsilonDuration(g *incr.Graph, input incr.Incr[time.Duration], epsilo
 type SensorGraph struct {
 	Name string
 
-	Latest incr.VarIncr[*Awair]
+	Latest incr.VarIncr[Awair]
 
 	Window incr.ObserveIncr[[]Awair]
 
@@ -218,6 +370,12 @@ type SensorGraph struct {
 	PM25Max  incr.ObserveIncr[float64]
 }
 
+func getSensorDataWithTimeout(ctx context.Context, sensorAddresses map[string]string) (map[string]Awair, error) {
+	timeoutctx, cancel := context.WithTimeout(ctx, time.Second)
+	defer cancel()
+	return getSensorData(timeoutctx, sensorAddresses)
+}
+
 func getSensorData(ctx context.Context, sensorAddresses map[string]string) (map[string]Awair, error) {
 	sensorData := make(map[string]Awair)
 	var resultsMu sync.Mutex
@@ -244,7 +402,6 @@ func getSensorData(ctx context.Context, sensorAddresses map[string]string) (map[
 	return sensorData, nil
 }
 
-// Awair is the latest awair data from a sensor.
 type Awair struct {
 	Timestamp     time.Time     `json:"timestamp"`
 	Score         float64       `json:"score"`
@@ -271,6 +428,7 @@ func getAwairData(ctx context.Context, host string) (data Awair, err error) {
 			Path:   path,
 		},
 	}
+	incr.TracePrintf(ctx, "fetching sensor data from: %s", req.URL.String())
 	err = getJSON(ctx, &req, &data)
 	return
 }
@@ -297,17 +455,6 @@ const (
 	queueDefaultCapacity = 4
 )
 
-// Queue is a fifo (first-in, first-out) buffer implementation.
-//
-// It is is backed by a pre-allocated array, which saves GC churn because the memory used
-// to hold elements is not released unless the queue is trimmed.
-//
-// This stands in opposition to how queues are typically are implemented, which is as a linked list.
-//
-// As a result, `Push` can be O(n) if the backing array needs to be embiggened, though this should be relatively rare
-// in pracitce if you're keeping a fixed queue size.
-//
-// Pop is generally O(1) because it just moves pointers around and nil's out elements.
 type Queue[A any] struct {
 	array []A
 	head  int
@@ -315,23 +462,14 @@ type Queue[A any] struct {
 	size  int
 }
 
-// Len returns the number of elements in the queue.
-//
-// Use `Cap()` to return the length of the backing array itself.
 func (q *Queue[A]) Len() int {
 	return q.size
 }
 
-// Cap returns the total capacity of the queue, including empty elements.
 func (q *Queue[A]) Cap() int {
 	return len(q.array)
 }
 
-// Clear removes all elements from the Queue.
-//
-// It does _not_ reclaim any backing buffer length.
-//
-// To resize the backing buffer, use `Trim(size)`.
 func (q *Queue[A]) Clear() {
 	q.head = 0
 	q.tail = 0
@@ -339,7 +477,6 @@ func (q *Queue[A]) Clear() {
 	clear(q.array)
 }
 
-// Push adds an element to the "back" of the Queue.
 func (q *Queue[A]) Push(v A) {
 	if len(q.array) == 0 {
 		q.array = make([]A, queueDefaultCapacity)
@@ -351,7 +488,6 @@ func (q *Queue[A]) Push(v A) {
 	q.size++
 }
 
-// Pop removes the first (oldest) element from the Queue.
 func (q *Queue[A]) Pop() (output A, ok bool) {
 	if q.size == 0 {
 		return
@@ -365,7 +501,6 @@ func (q *Queue[A]) Pop() (output A, ok bool) {
 	return
 }
 
-// Peek returns but does not remove the first element.
 func (q *Queue[A]) Peek() (output A, ok bool) {
 	if q.size == 0 {
 		return
@@ -375,7 +510,6 @@ func (q *Queue[A]) Peek() (output A, ok bool) {
 	return
 }
 
-// Values collects the storage array into a copy array which is returned.
 func (q *Queue[A]) Values() (output []A) {
 	if q.size == 0 {
 		return
@@ -396,12 +530,6 @@ func (q *Queue[A]) Values() (output []A) {
 	return
 }
 
-// SetCapacity copies the queue into a new buffer
-// with the given capacity.
-//
-// the new buffer will reset the head and tail
-// indices such that head will be 0, and tail
-// will be wherever the size index places it.
 func (q *Queue[A]) SetCapacity(capacity int) {
 	newArray := make([]A, capacity)
 	if q.size > 0 {
