@@ -23,8 +23,8 @@ import (
 // these may change based on DHCP settings.
 var awairSensors = map[string]string{
 	"Bedroom":     "192.168.4.74",
-	"Living Room": "192.168.4.47",
-	"Office":      "192.168.4.46",
+	"Office":      "192.168.4.47",
+	"Living Room": "192.168.4.46",
 }
 
 func main() {
@@ -301,7 +301,7 @@ func createStatsFor(g *incr.Graph, window incr.Incr[[]Awair], mapfn func(Awair) 
 		}
 		return 0
 	}), epsilon)
-	lastValue := cutoffEpsilon(g, incr.Map(g, sortedValues, func(data []float64) float64 {
+	lastValue := cutoffEpsilon(g, incr.Map(g, values, func(data []float64) float64 {
 		if len(data) > 0 {
 			return data[len(data)-1]
 		}
