@@ -17,6 +17,7 @@ import (
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 
+	"github.com/wcharczuk/go-diskq"
 	"github.com/wcharczuk/go-incr"
 )
 
@@ -72,20 +73,39 @@ func main() {
 
 	app.SetRoot(grid, true).EnableMouse(false)
 
+	cfg := diskq.Config{
+		Path:             "data",
+		PartitionCount:   3,
+		RetentionMaxAge:  72 * time.Hour,
+		SegmentSizeBytes: 512 * 1024, // 512kb
+	}
+
+	dq, err := diskq.New(cfg)
+	maybeFatal(err)
+	defer dq.Close()
+
+	go func() {
+		timer := time.NewTicker(5 * time.Second)
+		defer timer.Stop()
+		for range timer.C {
+			_ = dq.Vacuum()
+		}
+	}()
+
 	go func() {
 		ctx := context.Background()
 		ctx = incr.WithTracingOutputs(ctx, logs, logs)
 		timer := time.NewTicker(5 * time.Second)
-		var start time.Time
-		for {
+		defer timer.Stop()
+		for range timer.C {
 			logs.Reset()
-			start = time.Now()
 			data, err := getSensorDataWithTimeout(ctx, awairSensors)
 			if err != nil {
 				incr.TraceErrorf(ctx, "error getting sensor data: %v", err)
 				continue
 			}
 			for sensor, result := range data {
+				dq.Push(diskq.Message{PartitionKey: sensor, Data: encodeResult(result)})
 				incr.TracePrintf(ctx, "fetched %s in %v", sensor, result.Elapsed.Round(time.Millisecond))
 				graphs[sensor].Latest.Set(result)
 			}
@@ -95,14 +115,18 @@ func main() {
 			app.QueueUpdate(func() {
 				logView.SetText(logs.String())
 			})
-			timer.Reset((5 * time.Second) - time.Since(start))
-			<-timer.C
 		}
 	}()
-	err := app.Run()
+
+	err = app.Run()
 	if err != nil {
 		maybeFatal(err)
 	}
+}
+
+func encodeResult(v any) []byte {
+	data, _ := json.Marshal(v)
+	return data
 }
 
 func tempRange(temp float64) tcell.Color {
@@ -449,6 +473,7 @@ func getSensorData(ctx context.Context, sensorAddresses map[string]string) (map[
 				errors <- err
 				return
 			}
+			data.Sensor = s
 			resultsMu.Lock()
 			sensorData[s] = data
 			resultsMu.Unlock()
@@ -462,6 +487,7 @@ func getSensorData(ctx context.Context, sensorAddresses map[string]string) (map[
 }
 
 type Awair struct {
+	Sensor        string        `json:"sensor"`
 	Timestamp     time.Time     `json:"timestamp"`
 	Score         float64       `json:"score"`
 	DewPoint      float64       `json:"dew_point"`
