@@ -114,6 +114,7 @@ func main() {
 		ctx = incr.WithTracingOutputs(ctx, logs, logs)
 		timer := time.NewTicker(5 * time.Second)
 		defer timer.Stop()
+
 		if err = g.ParallelStabilize(ctx); err != nil {
 			incr.TraceErrorf(ctx, "stabilization error: %v", err)
 		}
