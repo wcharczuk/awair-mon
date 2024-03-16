@@ -18,6 +18,12 @@ github.com/wcharczuk/go-diskq v0.0.0-20240312014317-c4e471599cb5 h1:xHhhPCx1OwTD
 github.com/wcharczuk/go-diskq v0.0.0-20240312014317-c4e471599cb5/go.mod h1:tJaRBQwXN9z6qLAPUHxLBruEyOSwybfRIvignlAkyrg=
 github.com/wcharczuk/go-diskq v0.0.0-20240313154517-264f5c9c2a80 h1:XXXEfqe1VfErHCpjvNLNtl8UMRpsYAhI5VUsctohSIE=
 github.com/wcharczuk/go-diskq v0.0.0-20240313154517-264f5c9c2a80/go.mod h1:tJaRBQwXN9z6qLAPUHxLBruEyOSwybfRIvignlAkyrg=
+github.com/wcharczuk/go-diskq v0.0.0-20240314032009-eca3b65654cf h1:MEqvVTr51VueKPnG5eDwP+hSl7COO6YDAnNswPUfG+c=
+github.com/wcharczuk/go-diskq v0.0.0-20240314032009-eca3b65654cf/go.mod h1:tJaRBQwXN9z6qLAPUHxLBruEyOSwybfRIvignlAkyrg=
+github.com/wcharczuk/go-diskq v0.0.0-20240314040817-281ef69b0609 h1:mevYMe8EeBsLzqXo+Bg1h/RHX7aFDKl+1tG0pD41cBo=
+github.com/wcharczuk/go-diskq v0.0.0-20240314040817-281ef69b0609/go.mod h1:tJaRBQwXN9z6qLAPUHxLBruEyOSwybfRIvignlAkyrg=
+github.com/wcharczuk/go-diskq v0.0.0-20240315233753-523a625c17d5 h1:RVdG3ALsSKYdaiSC3f3wkx7xvlFUD0Yf2lKZXWyCjRg=
+github.com/wcharczuk/go-diskq v0.0.0-20240315233753-523a625c17d5/go.mod h1:tJaRBQwXN9z6qLAPUHxLBruEyOSwybfRIvignlAkyrg=
 github.com/wcharczuk/go-incr v1.0.4 h1:9vNZPAooBeupc23nytJztuNY/DCNVj9utKPy+gWbBxA=
 github.com/wcharczuk/go-incr v1.0.4/go.mod h1:IQ66WEXaOz/BhlRSoJbbjDbiahPUAeVkn8VPRI5ICys=
 github.com/yuin/goldmark v1.4.13/go.mod h1:6yULJ656Px+3vBD8DxQVa3kxgyrAnzto9xy5taEt/CY=

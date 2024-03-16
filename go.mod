@@ -5,7 +5,7 @@ go 1.21.3
 require (
 	github.com/gdamore/tcell/v2 v2.7.1
 	github.com/rivo/tview v0.0.0-20240204151237-861aa94d61c8
-	github.com/wcharczuk/go-diskq v0.0.0-20240313154517-264f5c9c2a80
+	github.com/wcharczuk/go-diskq v0.0.0-20240315233753-523a625c17d5
 	github.com/wcharczuk/go-incr v1.0.4
 )
 
