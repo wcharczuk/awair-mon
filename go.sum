@@ -14,14 +14,6 @@ github.com/rivo/uniseg v0.2.0/go.mod h1:J6wj4VEh+S6ZtnVlnTBMWIodfgj8LQOQFoIToxlJ
 github.com/rivo/uniseg v0.4.3/go.mod h1:FN3SvrM+Zdj16jyLfmOkMNblXMcoc8DfTHruCPUcx88=
 github.com/rivo/uniseg v0.4.7-0.20240127222946-601bbb3750c2 h1:tcc3ZFBvjydcgrAxavZRYqFqCKzy0FJ+UY4ATq4QVXk=
 github.com/rivo/uniseg v0.4.7-0.20240127222946-601bbb3750c2/go.mod h1:FN3SvrM+Zdj16jyLfmOkMNblXMcoc8DfTHruCPUcx88=
-github.com/wcharczuk/go-diskq v0.0.0-20240312014317-c4e471599cb5 h1:xHhhPCx1OwTD9PJPdzhcXTPo0EN9IhHQvk68S99l1Ok=
-github.com/wcharczuk/go-diskq v0.0.0-20240312014317-c4e471599cb5/go.mod h1:tJaRBQwXN9z6qLAPUHxLBruEyOSwybfRIvignlAkyrg=
-github.com/wcharczuk/go-diskq v0.0.0-20240313154517-264f5c9c2a80 h1:XXXEfqe1VfErHCpjvNLNtl8UMRpsYAhI5VUsctohSIE=
-github.com/wcharczuk/go-diskq v0.0.0-20240313154517-264f5c9c2a80/go.mod h1:tJaRBQwXN9z6qLAPUHxLBruEyOSwybfRIvignlAkyrg=
-github.com/wcharczuk/go-diskq v0.0.0-20240314032009-eca3b65654cf h1:MEqvVTr51VueKPnG5eDwP+hSl7COO6YDAnNswPUfG+c=
-github.com/wcharczuk/go-diskq v0.0.0-20240314032009-eca3b65654cf/go.mod h1:tJaRBQwXN9z6qLAPUHxLBruEyOSwybfRIvignlAkyrg=
-github.com/wcharczuk/go-diskq v0.0.0-20240314040817-281ef69b0609 h1:mevYMe8EeBsLzqXo+Bg1h/RHX7aFDKl+1tG0pD41cBo=
-github.com/wcharczuk/go-diskq v0.0.0-20240314040817-281ef69b0609/go.mod h1:tJaRBQwXN9z6qLAPUHxLBruEyOSwybfRIvignlAkyrg=
 github.com/wcharczuk/go-diskq v0.0.0-20240315233753-523a625c17d5 h1:RVdG3ALsSKYdaiSC3f3wkx7xvlFUD0Yf2lKZXWyCjRg=
 github.com/wcharczuk/go-diskq v0.0.0-20240315233753-523a625c17d5/go.mod h1:tJaRBQwXN9z6qLAPUHxLBruEyOSwybfRIvignlAkyrg=
 github.com/wcharczuk/go-incr v1.0.4 h1:9vNZPAooBeupc23nytJztuNY/DCNVj9utKPy+gWbBxA=
