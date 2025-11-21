@@ -14,16 +14,8 @@ github.com/rivo/uniseg v0.2.0/go.mod h1:J6wj4VEh+S6ZtnVlnTBMWIodfgj8LQOQFoIToxlJ
 github.com/rivo/uniseg v0.4.3/go.mod h1:FN3SvrM+Zdj16jyLfmOkMNblXMcoc8DfTHruCPUcx88=
 github.com/rivo/uniseg v0.4.7-0.20240127222946-601bbb3750c2 h1:tcc3ZFBvjydcgrAxavZRYqFqCKzy0FJ+UY4ATq4QVXk=
 github.com/rivo/uniseg v0.4.7-0.20240127222946-601bbb3750c2/go.mod h1:FN3SvrM+Zdj16jyLfmOkMNblXMcoc8DfTHruCPUcx88=
-github.com/wcharczuk/go-diskq v0.0.0-20240312014317-c4e471599cb5 h1:xHhhPCx1OwTD9PJPdzhcXTPo0EN9IhHQvk68S99l1Ok=
-github.com/wcharczuk/go-diskq v0.0.0-20240312014317-c4e471599cb5/go.mod h1:tJaRBQwXN9z6qLAPUHxLBruEyOSwybfRIvignlAkyrg=
-github.com/wcharczuk/go-diskq v0.0.0-20240313154517-264f5c9c2a80 h1:XXXEfqe1VfErHCpjvNLNtl8UMRpsYAhI5VUsctohSIE=
-github.com/wcharczuk/go-diskq v0.0.0-20240313154517-264f5c9c2a80/go.mod h1:tJaRBQwXN9z6qLAPUHxLBruEyOSwybfRIvignlAkyrg=
-github.com/wcharczuk/go-diskq v0.0.0-20240314032009-eca3b65654cf h1:MEqvVTr51VueKPnG5eDwP+hSl7COO6YDAnNswPUfG+c=
-github.com/wcharczuk/go-diskq v0.0.0-20240314032009-eca3b65654cf/go.mod h1:tJaRBQwXN9z6qLAPUHxLBruEyOSwybfRIvignlAkyrg=
-github.com/wcharczuk/go-diskq v0.0.0-20240314040817-281ef69b0609 h1:mevYMe8EeBsLzqXo+Bg1h/RHX7aFDKl+1tG0pD41cBo=
-github.com/wcharczuk/go-diskq v0.0.0-20240314040817-281ef69b0609/go.mod h1:tJaRBQwXN9z6qLAPUHxLBruEyOSwybfRIvignlAkyrg=
-github.com/wcharczuk/go-diskq v0.0.0-20240315233753-523a625c17d5 h1:RVdG3ALsSKYdaiSC3f3wkx7xvlFUD0Yf2lKZXWyCjRg=
-github.com/wcharczuk/go-diskq v0.0.0-20240315233753-523a625c17d5/go.mod h1:tJaRBQwXN9z6qLAPUHxLBruEyOSwybfRIvignlAkyrg=
+github.com/wcharczuk/go-diskq v0.0.0-20240405041532-0a013f736a9f h1:+8tXtegXUq3gAEVf9fimkaComBmS0S0MZa7wUzrSpzs=
+github.com/wcharczuk/go-diskq v0.0.0-20240405041532-0a013f736a9f/go.mod h1:tJaRBQwXN9z6qLAPUHxLBruEyOSwybfRIvignlAkyrg=
 github.com/wcharczuk/go-incr v1.0.4 h1:9vNZPAooBeupc23nytJztuNY/DCNVj9utKPy+gWbBxA=
 github.com/wcharczuk/go-incr v1.0.4/go.mod h1:IQ66WEXaOz/BhlRSoJbbjDbiahPUAeVkn8VPRI5ICys=
 github.com/yuin/goldmark v1.4.13/go.mod h1:6yULJ656Px+3vBD8DxQVa3kxgyrAnzto9xy5taEt/CY=
@@ -37,6 +29,7 @@ golang.org/x/net v0.0.0-20220722155237-a158d28d115b/go.mod h1:XRhObCWvk6IyKnWLug
 golang.org/x/net v0.6.0/go.mod h1:2Tu9+aMcznHK/AK1HMvgo6xiTLG5rD5rZLDS+rp2Bjs=
 golang.org/x/sync v0.0.0-20190423024810-112230192c58/go.mod h1:RxMgew5VJxzue5/jJTE5uejpjVlOe/izrB70Jof72aM=
 golang.org/x/sync v0.0.0-20220722155255-886fb9371eb4/go.mod h1:RxMgew5VJxzue5/jJTE5uejpjVlOe/izrB70Jof72aM=
+golang.org/x/sync v0.1.0 h1:wsuoTGHzEhffawBOhz5CYhcrV4IdKZbEyZjBMuTp12o=
 golang.org/x/sync v0.1.0/go.mod h1:RxMgew5VJxzue5/jJTE5uejpjVlOe/izrB70Jof72aM=
 golang.org/x/sys v0.0.0-20190215142949-d0b11bdaac8a/go.mod h1:STP8DvDyc/dI5b8T5hshtkjS+E42TnysNCUPdjciGhY=
 golang.org/x/sys v0.0.0-20201119102817-f84b799fce68/go.mod h1:h1NjWce9XRLGQEsW7wpKNCjG9DtNlClVuFLEZdDNbEs=

@@ -55,12 +55,15 @@ github.com/rivo/tview
 # github.com/rivo/uniseg v0.4.7-0.20240127222946-601bbb3750c2
 ## explicit; go 1.18
 github.com/rivo/uniseg
-# github.com/wcharczuk/go-diskq v0.0.0-20240315233753-523a625c17d5
+# github.com/wcharczuk/go-diskq v0.0.0-20240405041532-0a013f736a9f
 ## explicit; go 1.21.3
 github.com/wcharczuk/go-diskq
 # github.com/wcharczuk/go-incr v1.0.4
 ## explicit; go 1.21
 github.com/wcharczuk/go-incr
+# golang.org/x/sync v0.1.0
+## explicit
+golang.org/x/sync/errgroup
 # golang.org/x/sys v0.17.0
 ## explicit; go 1.18
 golang.org/x/sys/plan9

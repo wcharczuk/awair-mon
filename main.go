@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -16,6 +17,7 @@ import (
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
+	"golang.org/x/sync/errgroup"
 
 	"github.com/wcharczuk/go-diskq"
 	"github.com/wcharczuk/go-incr"
@@ -72,19 +74,21 @@ func main() {
 
 	app.SetRoot(grid, true).EnableMouse(false)
 
-	cfg := diskq.Config{
-		Path:             "data",
+	cfg := diskq.Options{
 		PartitionCount:   3,
 		RetentionMaxAge:  72 * time.Hour,
 		SegmentSizeBytes: 512 * 1024, // 512kb
 	}
 
-	dq, err := diskq.New(cfg)
+	dq, err := diskq.New("data", cfg)
 	maybeFatal(err)
 	defer dq.Close()
 
 	var rawValues []diskq.MessageWithOffset
-	err = diskq.Read(cfg.Path, &rawValues)
+	err = diskq.Read("data", func(msg diskq.MessageWithOffset) error {
+		rawValues = append(rawValues, msg)
+		return nil
+	})
 	maybeFatal(err)
 
 	for _, msg := range rawValues {
@@ -115,12 +119,14 @@ func main() {
 		timer := time.NewTicker(5 * time.Second)
 		defer timer.Stop()
 
+		incr.TracePrintln(ctx, "starting run loop")
 		if err = g.ParallelStabilize(ctx); err != nil {
 			incr.TraceErrorf(ctx, "stabilization error: %v", err)
 		}
 
 		for range timer.C {
 			logs.Reset()
+			incr.TracePrintln(ctx, "fetching sensor data")
 			data, err := getSensorDataWithTimeout(ctx, awairSensors)
 			if err != nil {
 				incr.TraceErrorf(ctx, "error getting sensor data: %v", err)
@@ -137,35 +143,13 @@ func main() {
 			app.QueueUpdate(func() {
 				logView.SetText(logs.String())
 			})
+			app.Draw()
 		}
 	}()
 
 	err = app.Run()
 	if err != nil {
 		maybeFatal(err)
-	}
-}
-
-func readExistingData(path string, fn func(diskq.MessageWithOffset) error) error {
-	c, err := diskq.OpenConsumerGroup(path, func(_ uint32) diskq.ConsumerOptions {
-		return diskq.ConsumerOptions{
-			StartAtBehavior: diskq.ConsumerStartAtBeginning,
-			EndBehavior:     diskq.ConsumerEndAndClose,
-		}
-	})
-	if err != nil {
-		return err
-	}
-	defer c.Close()
-
-	for {
-		msg, ok := <-c.Messages()
-		if !ok {
-			return nil
-		}
-		if err = fn(msg); err != nil {
-			return err
-		}
 	}
 }
 
@@ -224,10 +208,6 @@ func elapsedRange(elapsed time.Duration) tcell.Color {
 	if elapsed > 100*time.Millisecond {
 		return tcell.ColorYellow
 	}
-	return tcell.ColorWhite
-}
-
-func defaultRange[A any](_ A) tcell.Color {
 	return tcell.ColorWhite
 }
 
@@ -502,7 +482,6 @@ func (sg *SensorGraph) PushLatest(windowLength time.Duration, value Awair) {
 		sg.Window.Pop()
 	}
 	sg.Values.Set(sg.Window.Values())
-	return
 }
 
 func getSensorDataWithTimeout(ctx context.Context, sensorAddresses map[string]string) (map[string]Awair, error) {
@@ -514,27 +493,25 @@ func getSensorDataWithTimeout(ctx context.Context, sensorAddresses map[string]st
 func getSensorData(ctx context.Context, sensorAddresses map[string]string) (map[string]Awair, error) {
 	sensorData := make(map[string]Awair)
 	var resultsMu sync.Mutex
-	var wg sync.WaitGroup
-	wg.Add(len(awairSensors))
-	errors := make(chan error, len(awairSensors))
-	for sensor, host := range sensorAddresses {
-		go func(s, h string) {
-			defer wg.Done()
+	ops := new(errgroup.Group)
+	fetch := func(s, h string) func() error {
+		return func() error {
 			data, err := getAwairData(ctx, h)
 			if err != nil {
-				errors <- err
-				return
+				incr.TraceErrorf(ctx, "failed to fetch sensor data: %v", err)
+				return nil
 			}
 			data.Sensor = s
 			resultsMu.Lock()
 			sensorData[s] = data
 			resultsMu.Unlock()
-		}(sensor, host)
+			return nil
+		}
 	}
-	wg.Wait()
-	if len(errors) > 0 {
-		return nil, <-errors
+	for sensor, host := range sensorAddresses {
+		ops.Go(fetch(sensor, host))
 	}
+	_ = ops.Wait()
 	return sensorData, nil
 }
 
@@ -555,6 +532,22 @@ type Awair struct {
 	Elapsed       time.Duration `json:"-"`
 }
 
+func assertRouteToSensor(_ context.Context, addr string) error {
+	_, err := net.LookupHost(addr)
+	if err != nil {
+		return err
+	}
+	dialer := &net.Dialer{
+		Timeout: 10 * time.Second,
+	}
+	conn, err := dialer.DialContext(context.Background(), "tcp4", addr+":80")
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+	return nil
+}
+
 func getAwairData(ctx context.Context, host string) (data Awair, err error) {
 	const path = "/air-data/latest"
 	req := http.Request{
@@ -570,18 +563,23 @@ func getAwairData(ctx context.Context, host string) (data Awair, err error) {
 	return
 }
 
+var httpClient = &http.Client{
+	Timeout:   5 * time.Second,
+	Transport: &http.Transport{},
+}
+
 func getJSON(ctx context.Context, req *http.Request, output *Awair) (err error) {
 	started := time.Now()
 	var statusCode int
 	req = req.WithContext(ctx)
 	var res *http.Response
-	res, err = http.DefaultClient.Do(req)
+	res, err = httpClient.Do(req)
 	if err != nil {
-		return
+		return fmt.Errorf("http request failed to %s: %w", req.URL.String(), err)
 	}
 	defer res.Body.Close()
 	if statusCode = res.StatusCode; statusCode < http.StatusOK || statusCode > 299 {
-		return fmt.Errorf("non-200 returned from remote")
+		return fmt.Errorf("non-200 returned from remote: %d", statusCode)
 	}
 	err = json.NewDecoder(res.Body).Decode(output)
 	output.Elapsed = time.Since(started)

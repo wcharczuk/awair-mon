@@ -2,10 +2,7 @@ package diskq
 
 import (
 	"fmt"
-	"hash/fnv"
-	"io"
 	"os"
-	"path/filepath"
 	"time"
 )
 
@@ -13,22 +10,23 @@ import (
 //
 // The `Diskq` type itself should be thought of as a producer with
 // exclusive access to write to the data directory named in the config.
-func New(cfg Config) (*Diskq, error) {
-	if err := cfg.Validate(); err != nil {
-		return nil, err
-	}
+//
+// If the diskq exists on disk, new empty partitions will be created
+// and existing ones opened at their latest offsets for writing.
+func New(path string, cfg Options) (*Diskq, error) {
 	d := &Diskq{
-		id:  UUIDv4(),
-		cfg: cfg,
+		id:   UUIDv4(),
+		path: path,
+		cfg:  cfg,
 	}
-	if err := os.MkdirAll(cfg.Path, 0755); err != nil {
+	if err := os.MkdirAll(path, 0755); err != nil {
 		return nil, fmt.Errorf("diskq; cannot ensure data directory: %w", err)
 	}
 	if err := d.writeSentinel(); err != nil {
 		return nil, err
 	}
 	for partitionIndex := 0; partitionIndex < int(cfg.PartitionCountOrDefault()); partitionIndex++ {
-		p, err := NewPartition(cfg, uint32(partitionIndex))
+		p, err := NewPartition(path, cfg, uint32(partitionIndex))
 		if err != nil {
 			return nil, err
 		}
@@ -37,13 +35,16 @@ func New(cfg Config) (*Diskq, error) {
 	return d, nil
 }
 
-// Diskq is the root struct of the queue.
+// Diskq is the root struct of the diskq.
 //
 // It could be thought of primarily as the "producer" in the
-// streaming system; you will use this type to "Push" messages into the streams.
+// streaming system; you will use this type to "Push" messages into the partitions.
+//
+// Close will release open file handles that are held by the partitions.
 type Diskq struct {
 	id         UUID
-	cfg        Config
+	path       string
+	cfg        Options
 	partitions []*Partition
 }
 
@@ -69,15 +70,6 @@ func (dq *Diskq) Push(value Message) (partition uint32, offset uint64, err error
 	return
 }
 
-// GetOffset finds and decodes a message by offset in a given partition and returns it.
-func (dq *Diskq) GetOffset(partitionIndex uint32, offset uint64) (v Message, ok bool, err error) {
-	if partitionIndex >= uint32(len(dq.partitions)) {
-		return
-	}
-	v, ok, err = dq.partitions[partitionIndex].GetOffset(offset)
-	return
-}
-
 // Vacuum deletes old segments from all partitions
 // if retention is configured.
 func (dq *Diskq) Vacuum() (err error) {
@@ -99,13 +91,7 @@ func (dq *Diskq) Vacuum() (err error) {
 // You shouldn't ever need to call this, but it's here if you do need to.
 func (dq *Diskq) Sync() error {
 	for _, p := range dq.partitions {
-		if err := maybeSync(p.activeSegment.index); err != nil {
-			return err
-		}
-		if err := maybeSync(p.activeSegment.timeindex); err != nil {
-			return err
-		}
-		if err := maybeSync(p.activeSegment.data); err != nil {
+		if err := p.Sync(); err != nil {
 			return err
 		}
 	}
@@ -126,31 +112,23 @@ func (dq *Diskq) Close() error {
 //
 
 func (dq *Diskq) writeSentinel() error {
-	sentinelPath := filepath.Join(dq.cfg.Path, "owner")
+	sentinelPath := FormatPathForSentinel(dq.path)
 	sf, err := os.OpenFile(sentinelPath, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0644)
 	if err != nil {
-		return err
+		return fmt.Errorf("diskq; write sentinel; cannot open file in exclusive mode: %w", err)
 	}
 	defer func() { _ = sf.Close() }()
-
 	_, err = sf.Write(dq.id[:])
-	return err
-}
-
-func (dq *Diskq) releaseSentinel() error {
-	return os.Remove(filepath.Join(dq.cfg.Path, "owner"))
-}
-
-func maybeSync(wr io.Writer) error {
-	if typed, ok := wr.(*os.File); ok {
-		return typed.Sync()
+	if err != nil {
+		return fmt.Errorf("diskq; write sentinel; cannot write id to file: %w", err)
 	}
 	return nil
 }
 
-//
-// internal helpers
-//
+func (dq *Diskq) releaseSentinel() error {
+	sentinelPath := FormatPathForSentinel(dq.path)
+	return os.Remove(sentinelPath)
+}
 
 func (dq *Diskq) partitionForMessage(m Message) *Partition {
 	hashIndex := hashIndexForMessage(m, len(dq.partitions))
@@ -158,10 +136,4 @@ func (dq *Diskq) partitionForMessage(m Message) *Partition {
 		return nil
 	}
 	return dq.partitions[hashIndex]
-}
-
-func hashIndexForMessage(m Message, partitions int) int {
-	h := fnv.New32()
-	_, _ = h.Write([]byte(m.PartitionKey))
-	return int(h.Sum32()) % partitions
 }

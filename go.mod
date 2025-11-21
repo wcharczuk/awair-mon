@@ -1,12 +1,13 @@
 module bigmodel
 
-go 1.21.3
+go 1.25.4
 
 require (
 	github.com/gdamore/tcell/v2 v2.7.1
 	github.com/rivo/tview v0.0.0-20240204151237-861aa94d61c8
-	github.com/wcharczuk/go-diskq v0.0.0-20240315233753-523a625c17d5
+	github.com/wcharczuk/go-diskq v0.0.0-20240405041532-0a013f736a9f
 	github.com/wcharczuk/go-incr v1.0.4
+	golang.org/x/sync v0.1.0
 )
 
 require (
