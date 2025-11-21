@@ -1,4 +1,4 @@
-module bigmodel
+module awair-mon
 
 go 1.25.4
 
